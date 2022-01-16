@@ -119,10 +119,10 @@ class StreamController extends Controller
                     $topStreamViewerCount = $stream->viewer_count;
                 }
             }
+            $lowestUserFollowedStreamViewerCount = 0;
             $streamsFollowedByUser = UserFollowedStream::where('user_id', session('logged_user_id'))->get();
             $streamsFollowedByUser = $streamsFollowedByUser->pluck('stream_id')->toArray();
             if (!empty($streamsFollowedByUser)) {
-                $lowestUserFollowedStreamViewerCount = 0;
                 foreach ($streams as $stream) {
                     if (in_array($stream->id, $streamsFollowedByUser)) {
                         if ($stream->viewer_count < $lowestUserFollowedStreamViewerCount || $lowestUserFollowedStreamViewerCount == 0) {
