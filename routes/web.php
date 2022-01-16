@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\LoginController;
+use App\Http\Controllers\StreamController;
 
 /*
 |--------------------------------------------------------------------------
@@ -13,6 +15,10 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::get('/', [LoginController::class, 'index']);
+
+Route::get('/auth/twitch', [LoginController::class, 'authTwitchAPI']);
+
+Route::get('/streams', [StreamController::class, 'index']);
+
+Route::get('/streams/seed-data', [StreamController::class, 'seedData']);
