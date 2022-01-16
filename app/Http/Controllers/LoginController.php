@@ -86,7 +86,7 @@ class LoginController extends Controller
         } else {
             $redirectURL = "https://id.twitch.tv/oauth2/authorize";
             $redirectURL .= "?client_id=" . env('TWITCH_CLIENT_ID');
-            $redirectURL .= "&redirect_uri=http://localhost:8000/auth/twitch";
+            $redirectURL .= "&redirect_uri=". env('APP_URL') ."/auth/twitch";
             $redirectURL .= "&response_type=code";
             $redirectURL .= "&scope=user:read:email user:read:follows";
 
