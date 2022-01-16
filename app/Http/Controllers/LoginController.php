@@ -2,20 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Stream;
+use App\Models\TwitchApi;
+use App\Models\User;
+use App\Models\UserFollowedStream;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Session;
-use Laravel\Socialite\Facades\Socialite;
+use Illuminate\Support\Facades\Http;
 
 class LoginController extends Controller
 {
-    public function index()
-    {
-        if (!empty(session('access_token'))) {
-            return "HOME PAGE";
-        }
-        return redirect('/auth/twitch?redirectTo=home');
-    }
-
     public function authTwitchAPI(Request $request)
     {
         $code = $request->query('code');
@@ -24,25 +19,58 @@ class LoginController extends Controller
             session(['redirectTo' => $redirectToPage]);
 
         if (!empty($code)) {
-            $curl = curl_init();
-            curl_setopt_array($curl, array(
-                CURLOPT_URL => 'https://id.twitch.tv/oauth2/token?client_id=mgyp247gosmi3pyj0h30he5ojy45kn&client_secret=ovnb3pwqigsnuwa412uzgbp5ac5xdf&code=' . $code . '&grant_type=authorization_code&redirect_uri=http://localhost:8000/auth/twitch',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_ENCODING => '',
-                CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 0,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_CUSTOMREQUEST => 'POST',
-            ));
 
-            $response = curl_exec($curl);
-            curl_close($curl);
+            $response = Http::post('https://id.twitch.tv/oauth2/token?client_id=' . env('TWITCH_CLIENT_ID') . '&client_secret=' . env('TWITCH_CLIENT_SECRET') . '&code=' . $code . '&grant_type=authorization_code&redirect_uri=' . env('TWITCH_REDIRECT_URI'));
 
-            if (!empty($response)) {
-                $authData = json_decode($response);
+            if (!empty($response->object())) {
+                $authData = $response->object();
                 if (!empty($authData->access_token)) {
+
+                    TwitchApi::truncate();
+                    TwitchApi::create([
+                        'access_token' => $authData->access_token,
+                        'refresh_token' => $authData->refresh_token
+                    ]);
+
                     session(['access_token' => $authData->access_token]);
+
+                    $response = Http::withHeaders([
+                        'Client-Id' => env('TWITCH_CLIENT_ID'),
+                        'Authorization' => 'Bearer ' . $authData->access_token
+                    ])->get('https://api.twitch.tv/helix/users');
+
+                    $userDetails = $response->object();
+                    if (!empty($userDetails->data)) {
+                        foreach ($userDetails->data as $user) {
+                            session(['logged_user_id' => $user->id]);
+                            $userData = [
+                                'twitch_id' => $user->id,
+                                'name' => $user->display_name,
+                                'email' => $user->email
+                            ];
+                            User::updateOrCreate(['twitch_id' => $user->id], $userData);
+
+                            //get user followed streams
+                            $response = Http::withHeaders([
+                                'Client-Id' => env('TWITCH_CLIENT_ID'),
+                                'Authorization' => 'Bearer ' . $authData->access_token
+                            ])->get('https://api.twitch.tv/helix/streams/followed', ['user_id' => $user->id]);
+
+                            $followedStreams = $response->object();
+                            if(!empty($followedStreams))
+                            {
+                                foreach ($followedStreams->data as $stream) {
+                                    $streamData = [
+                                        'user_id' => $user->id,
+                                        'stream_id' => $stream->id
+                                    ];
+                                    UserFollowedStream::updateOrCreate(['stream_id' => $stream->id], $streamData);
+                                }
+                            }
+                        }
+
+
+                    }
                     $redirectToPage = session('redirectTo');
                     session(['redirectTo' => null]);
                     if ($redirectToPage == 'home') {
@@ -60,8 +88,7 @@ class LoginController extends Controller
             $redirectURL .= "?client_id=" . env('TWITCH_CLIENT_ID');
             $redirectURL .= "&redirect_uri=http://localhost:8000/auth/twitch";
             $redirectURL .= "&response_type=code";
-            $redirectURL .= "&scope=user:edit";
-
+            $redirectURL .= "&scope=user:read:email user:read:follows";
 
             return redirect($redirectURL);
         }
